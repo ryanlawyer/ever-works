@@ -54,6 +54,8 @@ import type { AgentRunStatus } from '../entities/agent-run.entity';
 import { TaskNotificationService } from './task-notification.service';
 import { WorkKnowledgeUploadRepository } from '../database/repositories/work-knowledge-upload.repository';
 import { WorkRepository } from '../database/repositories/work.repository';
+import { WorkMemberRepository } from '../database/repositories/work-member.repository';
+import { WorkMemberRole } from '../entities/types';
 import { RepoConnectionRepository } from '../database/repositories/repo-connection.repository';
 import { WorkProposalRepository } from '../user-research/work-proposal.repository';
 import {
@@ -353,6 +355,7 @@ export class TasksService {
         // `withRunNowClaim`). Appended LAST + @Optional per the
         // positional-spec arity rule.
         @Optional() private readonly runNowLock?: DistributedTaskLockService,
+        @Optional() private readonly workMembers?: WorkMemberRepository,
     ) {}
 
     /** Per-process run-now claims, used only when `runNowLock` is unbound. */
@@ -503,8 +506,8 @@ export class TasksService {
 
     /**
      * Keep board/list visibility aligned with {@link getOne}: a Task whose
-     * referenced Work is missing, foreign, or in another active scope must
-     * not be listed and then immediately 404 when opened.
+     * referenced Work is missing, neither owned nor shared with the actor,
+     * or in another active scope must not be listed and then 404 when opened.
      */
     private async filterTasksByReachableWork(
         userId: string,
@@ -520,9 +523,17 @@ export class TasksService {
         if (!this.works) return rows.filter((task) => !task.workId);
 
         const works = await this.works.findByIds(workIds).catch(() => []);
+        const scopedWorks = works.filter((work) => ownershipScopeMatches(work, scope));
+        const foreignWorkIds = scopedWorks
+            .filter((work) => work.userId !== userId)
+            .map((work) => work.id);
+        const memberRoles =
+            this.workMembers && foreignWorkIds.length > 0
+                ? await this.workMembers.getMemberRolesForWorks(userId, foreignWorkIds)
+                : new Map<string, WorkMemberRole>();
         const reachableWorkIds = new Set(
-            works
-                .filter((work) => work.userId === userId && ownershipScopeMatches(work, scope))
+            scopedWorks
+                .filter((work) => work.userId === userId || memberRoles.has(work.id))
                 .map((work) => work.id),
         );
         return rows.filter((task) => !task.workId || reachableWorkIds.has(task.workId));
@@ -535,12 +546,16 @@ export class TasksService {
         }
 
         // A Work-scoped Task carries two authoritative scope rows. Both must
-        // agree with the active request; accepting the Task row alone lets a
-        // stale/malformed cross-Organization workId dispatch in the wrong
-        // workspace. Fail closed when the Work repository is unavailable.
+        // agree with the active request. The Task stays owner-scoped, while
+        // the referenced Work may be owned OR explicitly shared. Fail closed
+        // if a foreign Work's membership cannot be verified.
         if (scope && task.workId) {
             const work = this.works ? await this.works.findById(task.workId) : null;
-            if (!work || work.userId !== userId || !ownershipScopeMatches(work, scope)) {
+            if (
+                !work ||
+                !ownershipScopeMatches(work, scope) ||
+                (work.userId !== userId && !(await this.workMembers?.isMember(work.id, userId)))
+            ) {
                 throw new NotFoundException(`Task ${id} not found.`);
             }
         }
@@ -1938,7 +1953,12 @@ export class TasksService {
                 throw new BadRequestException('Work repository not wired in this context.');
             }
             const work = await this.works.findById(input.workId);
-            if (!work || work.userId !== userId || !ownershipScopeMatches(work, ownershipScope)) {
+            if (
+                !work ||
+                !ownershipScopeMatches(work, ownershipScope) ||
+                (work.userId !== userId &&
+                    !(await this.workMembers?.hasRole(work.id, userId, WorkMemberRole.EDITOR)))
+            ) {
                 throw new BadRequestException(`Work ${input.workId} not found.`);
             }
         }
