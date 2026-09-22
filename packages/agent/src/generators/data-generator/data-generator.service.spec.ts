@@ -14,6 +14,7 @@ describe('DataGeneratorService runtime YAML certification', () => {
     let service: DataGeneratorService;
     let gitFacade: { cloneOrPull: jest.Mock; repositoryExists: jest.Mock };
     let pipelineOrchestrator: { execute: jest.Mock; resumeOrExecute: jest.Mock };
+    let categoryIconService: { enrichCategories: jest.Mock };
 
     const owner = { id: 'owner-1' } as User;
     const user = { id: 'user-1' } as User;
@@ -37,6 +38,9 @@ describe('DataGeneratorService runtime YAML certification', () => {
             execute: jest.fn(),
             resumeOrExecute: jest.fn(),
         };
+        categoryIconService = {
+            enrichCategories: jest.fn().mockResolvedValue([]),
+        };
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -45,7 +49,7 @@ describe('DataGeneratorService runtime YAML certification', () => {
                 { provide: PipelineOrchestratorService, useValue: pipelineOrchestrator },
                 { provide: WorkOperationsService, useValue: {} },
                 { provide: WorksConfigWriterService, useValue: {} },
-                { provide: CategoryIconService, useValue: {} },
+                { provide: CategoryIconService, useValue: categoryIconService },
             ],
         }).compile();
 
@@ -54,6 +58,31 @@ describe('DataGeneratorService runtime YAML certification', () => {
 
     afterEach(() => {
         jest.restoreAllMocks();
+    });
+
+    it.each(['claude-code', 'codex'])(
+        'does not call an API model for optional icons after a %s subscription pipeline',
+        async (pipeline) => {
+            const categories = [{ id: 'stage', name: 'Stage' }];
+            const result = await (service as any).maybeEnrichCategoryIcons(
+                categories,
+                { providers: { pipeline } },
+                { userId: user.id, workId: work.id },
+            );
+
+            expect(result).toBe(categories);
+            expect(categoryIconService.enrichCategories).not.toHaveBeenCalled();
+        },
+    );
+
+    it('allows explicit API icon generation for a subscription pipeline', async () => {
+        await (service as any).maybeEnrichCategoryIcons(
+            [{ id: 'stage', name: 'Stage' }],
+            { providers: { pipeline: 'claude-code' }, pluginConfig: { generate_category_icons: true } },
+            { userId: user.id, workId: work.id },
+        );
+
+        expect(categoryIconService.enrichCategories).toHaveBeenCalledTimes(1);
     });
 
     it('stops update generation before the pipeline when the existing corpus is runtime-incompatible', async () => {

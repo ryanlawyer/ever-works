@@ -1710,7 +1710,14 @@ export class DataGeneratorService {
 
     private shouldGenerateCategoryIcons(dto: CreateItemsGeneratorDto): boolean {
         const pluginConfig = dto.pluginConfig as Record<string, unknown> | undefined;
-        return pluginConfig?.generate_category_icons !== false;
+        if (pluginConfig?.generate_category_icons === true) return true;
+        if (pluginConfig?.generate_category_icons === false) return false;
+
+        // Claude Code and Codex use the user's CLI subscription for the main
+        // pipeline. Icon enrichment uses AiFacade separately and can silently
+        // charge the configured API provider. Keep the UI fallback unless the
+        // caller explicitly opts into those API calls.
+        return !['claude-code', 'codex'].includes(dto.providers?.pipeline ?? '');
     }
 
     private getDefaultReadme(work: Work) {
