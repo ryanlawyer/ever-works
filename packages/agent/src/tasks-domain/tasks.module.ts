@@ -18,6 +18,7 @@ import { UserTaskCounter } from '../entities/user-task-counter.entity';
 import { WorkKnowledgeUpload } from '../entities/work-knowledge-upload.entity';
 import { AgentRepoAttachment } from '../entities/agent-repo-attachment.entity';
 import { Work } from '../entities/work.entity';
+import { WorkMember } from '../entities/work-member.entity';
 import { Mission } from '../entities/mission.entity';
 import { Team } from '../entities/team.entity';
 import { Goal } from '../entities/goal.entity';
@@ -29,6 +30,7 @@ import { AgentRepoAttachmentRepository } from '../database/repositories/agent-re
 import { TaskTemplateRepository } from '../database/repositories/task-template.repository';
 import { WorkKnowledgeUploadRepository } from '../database/repositories/work-knowledge-upload.repository';
 import { WorkRepository } from '../database/repositories/work.repository';
+import { WorkMemberRepository } from '../database/repositories/work-member.repository';
 import { WorkProposalRepository } from '../user-research/work-proposal.repository';
 import {
     TaskAssigneeRepository,
@@ -108,6 +110,7 @@ import { DistributedTaskLockService } from '../cache/distributed-task-lock.servi
             UserTaskCounter,
             WorkKnowledgeUpload,
             Work,
+            WorkMember,
             Mission,
             WorkProposal,
             // Owner-reachability checks for the Team / Goal task owners.
@@ -161,6 +164,7 @@ import { DistributedTaskLockService } from '../cache/distributed-task-lock.servi
         UserTaskCounterRepository,
         WorkKnowledgeUploadRepository,
         WorkRepository,
+        WorkMemberRepository,
         WorkProposalRepository,
         // Tasks upgrades — workflow-template store + CRUD/instantiation.
         TaskTemplateRepository,

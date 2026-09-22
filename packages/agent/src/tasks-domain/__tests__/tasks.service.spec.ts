@@ -1,6 +1,8 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TasksService } from '../tasks.service';
 import { TaskPriority, TaskStatus, type Task } from '../../entities/task.entity';
+import { WorkMember } from '../../entities/work-member.entity';
+import { WorkMemberRole } from '../../entities/types';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
     return {
@@ -78,6 +80,11 @@ function makeService(overrides: Record<string, any> = {}) {
             findById: jest.fn(),
             findByIds: jest.fn(),
         },
+        workMembers: {
+            isMember: jest.fn(),
+            hasRole: jest.fn(),
+            getMemberRolesForWorks: jest.fn().mockResolvedValue(new Map()),
+        },
         missions: {
             findOne: jest.fn(),
         },
@@ -134,6 +141,9 @@ function makeService(overrides: Record<string, any> = {}) {
         repos.users as any,
         repos.organizationMembers as any,
         repos.tenants as any,
+        undefined,
+        undefined,
+        repos.workMembers as any,
     );
 
     return { service, repos };
@@ -411,6 +421,55 @@ describe('TasksService authorization guardrails', () => {
         });
     });
 
+    it('lets a Work member read and list their own Task in the matching scope', async () => {
+        const task = makeTask({
+            id: 'member-task',
+            userId: 'user-1',
+            workId: 'shared-work',
+            ...everScope,
+        });
+        const work = { id: 'shared-work', userId: 'other-user', ...everScope };
+        const { service, repos } = makeService();
+        repos.tasks.findByIdAndUser.mockResolvedValueOnce(task);
+        repos.works.findById.mockResolvedValueOnce(work);
+        repos.workMembers.isMember.mockResolvedValueOnce(true);
+        await expect(service.getOne('user-1', task.id, everScope)).resolves.toBe(task);
+
+        repos.tasks.findByUserIdFiltered.mockResolvedValueOnce({ rows: [task], total: 1 });
+        repos.works.findByIds.mockResolvedValueOnce([work]);
+        repos.workMembers.getMemberRolesForWorks.mockResolvedValueOnce(
+            new Map([['shared-work', 'manager']]),
+        );
+        await expect(service.list('user-1', {}, {}, everScope)).resolves.toEqual({
+            rows: [task],
+            total: 1,
+        });
+    });
+
+    it('does not expose an own Task after shared Work membership is removed', async () => {
+        const task = makeTask({
+            id: 'former-member-task',
+            userId: 'user-1',
+            workId: 'shared-work',
+            ...everScope,
+        });
+        const work = { id: 'shared-work', userId: 'other-user', ...everScope };
+        const { service, repos } = makeService();
+        repos.tasks.findByIdAndUser.mockResolvedValueOnce(task);
+        repos.works.findById.mockResolvedValueOnce(work);
+        repos.workMembers.isMember.mockResolvedValueOnce(false);
+        await expect(service.getOne('user-1', task.id, everScope)).rejects.toBeInstanceOf(
+            NotFoundException,
+        );
+
+        repos.tasks.findByUserIdFiltered.mockResolvedValueOnce({ rows: [task], total: 1 });
+        repos.works.findByIds.mockResolvedValueOnce([work]);
+        await expect(service.list('user-1', {}, {}, everScope)).resolves.toEqual({
+            rows: [],
+            total: 0,
+        });
+    });
+
     it('keeps legacy personal Task and Work rows reachable in personal scope', async () => {
         const legacy = makeTask({
             id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
@@ -467,6 +526,33 @@ describe('TasksService authorization guardrails', () => {
         expect(repos.tasks.create).toHaveBeenCalledWith(
             expect.objectContaining({ userId: 'user-1', workId: 'work-1' }),
         );
+    });
+
+    it('lets a shared Work editor create their own Task but rejects a viewer', async () => {
+        const work = { id: 'shared-work', userId: 'other-user', ...everScope };
+        const input = {
+            title: 'Shared task',
+            workId: work.id,
+            createdByType: 'user' as const,
+            createdById: 'user-1',
+        };
+        const { service, repos } = makeService();
+        repos.works.findById.mockResolvedValue(work);
+        repos.workMembers.hasRole.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+        repos.tasks.create.mockResolvedValueOnce(makeTask({ workId: work.id, ...everScope }));
+        await expect(service.create('user-1', input, everScope)).resolves.toBeDefined();
+        await expect(service.create('user-1', input, everScope)).rejects.toBeInstanceOf(
+            BadRequestException,
+        );
+        expect(repos.workMembers.hasRole).toHaveBeenCalledWith(work.id, 'user-1', 'editor');
+        expect(repos.tasks.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats a real Work manager as meeting the editor threshold', () => {
+        const member = new WorkMember();
+        member.role = WorkMemberRole.MANAGER;
+        expect(member.hasRoleOrHigher(WorkMemberRole.EDITOR)).toBe(true);
+        expect(member.hasRoleOrHigher(WorkMemberRole.OWNER)).toBe(false);
     });
 
     it('stamps an explicit Goal background scope and validates its Agent in that same scope', async () => {
