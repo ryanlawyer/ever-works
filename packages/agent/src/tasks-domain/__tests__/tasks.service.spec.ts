@@ -1,6 +1,8 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TasksService } from '../tasks.service';
 import { TaskPriority, TaskStatus, type Task } from '../../entities/task.entity';
+import { WorkMember } from '../../entities/work-member.entity';
+import { WorkMemberRole } from '../../entities/types';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
     return {
@@ -544,6 +546,13 @@ describe('TasksService authorization guardrails', () => {
         );
         expect(repos.workMembers.hasRole).toHaveBeenCalledWith(work.id, 'user-1', 'editor');
         expect(repos.tasks.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats a real Work manager as meeting the editor threshold', () => {
+        const member = new WorkMember();
+        member.role = WorkMemberRole.MANAGER;
+        expect(member.hasRoleOrHigher(WorkMemberRole.EDITOR)).toBe(true);
+        expect(member.hasRoleOrHigher(WorkMemberRole.OWNER)).toBe(false);
     });
 
     it('stamps an explicit Goal background scope and validates its Agent in that same scope', async () => {
