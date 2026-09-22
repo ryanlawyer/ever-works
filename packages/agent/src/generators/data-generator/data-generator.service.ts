@@ -231,6 +231,7 @@ export class DataGeneratorService {
             if (createItemsGeneratorDto.generation_method === GenerationMethod.CREATE_UPDATE) {
                 existingData = await this.getExistingData(work, user, {
                     requireRuntimeCompatibility: true,
+                    allowMissingRepository: true,
                 });
                 existingItemsBeforeGeneration = existingData.existingItems;
             } else if (createItemsGeneratorDto.generation_method === GenerationMethod.RECREATE) {
@@ -1483,13 +1484,33 @@ export class DataGeneratorService {
     private async getExistingData(
         work: Work,
         user: User,
-        options: { requireRuntimeCompatibility?: boolean } = {},
+        options: { requireRuntimeCompatibility?: boolean; allowMissingRepository?: boolean } = {},
     ) {
         const workOwner = this.getWorkOwner(work);
         const committer = work.resolveCommitter(user);
         const repo = work.getDataRepo();
 
         try {
+            // A first CREATE_UPDATE run has no data repository yet. Certify an
+            // existing repository, but let the pipeline create a missing one.
+            // Other lookup failures still fail closed before generation.
+            if (options.allowMissingRepository) {
+                const exists = await this.gitFacade.repositoryExists(
+                    work.getRepoOwner(),
+                    repo,
+                    { userId: workOwner.id, providerId: work.gitProvider, workId: work.id },
+                );
+                if (!exists) {
+                    return {
+                        existingItems: [],
+                        existingCategories: [],
+                        existingTags: [],
+                        existingCollections: [],
+                        existingReferences: [],
+                        existingConfig: null,
+                    };
+                }
+            }
             const dest = await this.gitFacade.cloneOrPull(
                 { owner: work.getRepoOwner(), repo, committer },
                 {

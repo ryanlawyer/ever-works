@@ -12,7 +12,7 @@ import { DataRepository, RuntimeYamlCompatibilityError } from './data-repository
 
 describe('DataGeneratorService runtime YAML certification', () => {
     let service: DataGeneratorService;
-    let gitFacade: { cloneOrPull: jest.Mock };
+    let gitFacade: { cloneOrPull: jest.Mock; repositoryExists: jest.Mock };
     let pipelineOrchestrator: { execute: jest.Mock; resumeOrExecute: jest.Mock };
 
     const owner = { id: 'owner-1' } as User;
@@ -31,6 +31,7 @@ describe('DataGeneratorService runtime YAML certification', () => {
     beforeEach(async () => {
         gitFacade = {
             cloneOrPull: jest.fn().mockResolvedValue('C:/tmp/runtime-yaml-test-data'),
+            repositoryExists: jest.fn().mockResolvedValue(true),
         };
         pipelineOrchestrator = {
             execute: jest.fn(),
@@ -108,6 +109,47 @@ describe('DataGeneratorService runtime YAML certification', () => {
 
         expect(pipelineOrchestrator.execute).not.toHaveBeenCalled();
         expect(pipelineOrchestrator.resumeOrExecute).not.toHaveBeenCalled();
+    });
+
+    it('starts first generation when the data repository does not exist yet', async () => {
+        gitFacade.repositoryExists.mockResolvedValue(false);
+        pipelineOrchestrator.execute.mockResolvedValue(undefined);
+
+        await expect(
+            service.initialize(work, user, {
+                name: work.name,
+                prompt: 'Create the directory',
+                generation_method: GenerationMethod.CREATE_UPDATE,
+            } as any),
+        ).resolves.toMatchObject({
+            success: false,
+            error: { code: 'GENERATION_FAILED' },
+        });
+
+        expect(gitFacade.repositoryExists).toHaveBeenCalledWith(
+            'ever-works',
+            'runtime-yaml-test-data',
+            { userId: owner.id, providerId: 'github', workId: work.id },
+        );
+        expect(gitFacade.cloneOrPull).not.toHaveBeenCalled();
+        expect(pipelineOrchestrator.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails closed when checking repository existence fails', async () => {
+        gitFacade.repositoryExists.mockRejectedValue(new Error('GitHub unavailable'));
+
+        await expect(
+            service.initialize(work, user, {
+                name: work.name,
+                prompt: 'Create the directory',
+                generation_method: GenerationMethod.CREATE_UPDATE,
+            } as any),
+        ).resolves.toMatchObject({
+            success: false,
+            error: { code: 'DATA_REPO_FAILED' },
+        });
+
+        expect(pipelineOrchestrator.execute).not.toHaveBeenCalled();
     });
 
     it('keeps ordinary item reads tolerant by skipping generation certification', async () => {
