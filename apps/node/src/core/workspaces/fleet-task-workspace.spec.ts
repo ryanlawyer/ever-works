@@ -384,6 +384,25 @@ describe('FleetTaskWorkspaceProvisioner — refusal and diagnostics', () => {
 		await expect(provisioner.provision('task-0001', valid)).rejects.toMatchObject({ code: 'path-collision' });
 	});
 
+	it('passes the scoped clone credential into the Git provider before fetching', async () => {
+		const authFor = vi.fn(async () => ({ username: 'x-access-token', token: 'ghs_read_only' }));
+		const plugin = {
+			provision: vi.fn(async () => {
+				throw new Error('fetch failed');
+			})
+		} as unknown as FleetWorkspacePlugin;
+		const provisioner = new FleetTaskWorkspaceProvisioner({ rootPath, plugin });
+		await expect(provisioner.provision('task-clone-auth', valid, undefined, { authFor })).rejects.toMatchObject({
+			code: 'provision-failed'
+		});
+		expect(authFor).toHaveBeenCalledWith(valid.repoUrl);
+		expect(plugin.provision).toHaveBeenCalledWith(
+			expect.objectContaining({
+				auth: { username: 'x-access-token', token: 'ghs_read_only' }
+			})
+		);
+	});
+
 	it('rejects an in-root junction created by a provider during provisioning', async () => {
 		const ownedRoot = temporaryRoot('ew-fleet-provider-alias-');
 		let targetPath = '';

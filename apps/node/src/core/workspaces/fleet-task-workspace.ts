@@ -24,6 +24,7 @@ import type { DiskProbeIo } from '../telemetry-probe';
 import { effectiveMinFreeDiskBytes } from '../types';
 import { measureWorkspaceFreeBytes } from './disk-headroom';
 import { PushCredentialError, type PushCredentialProvider, type ScopedPushCredential } from './push-credential';
+import type { CloneCredentialProvider } from './clone-credential';
 import { removeRunEnvFiles, sweepStaleRunEnvFiles, writeRunEnvFiles, type RunEnvFileWrite } from './run-env-files';
 
 export type FleetTaskWorkspaceErrorCode =
@@ -635,7 +636,8 @@ export class FleetTaskWorkspaceProvisioner {
 	async provision(
 		taskId: string,
 		rawSpec: FleetTaskWorkspaceSpec,
-		signal?: AbortSignal
+		signal?: AbortSignal,
+		cloneCredentials?: CloneCredentialProvider
 	): Promise<FleetTaskWorkspaceDescriptor> {
 		const normalizedTaskId = validateTaskId(taskId);
 		const spec = validateWorkspaceSpec(rawSpec);
@@ -645,7 +647,7 @@ export class FleetTaskWorkspaceProvisioner {
 		await this.assertDiskHeadroom(signal);
 		const leased: string[] = [];
 		try {
-			return await this.provisionAll(normalizedTaskId, spec, leased, signal);
+			return await this.provisionAll(normalizedTaskId, spec, leased, signal, cloneCredentials);
 		} catch (error) {
 			// A provision that did not produce a workspace holds no job: drop
 			// whatever leases it took on the way, or the reaper would see a
@@ -659,9 +661,10 @@ export class FleetTaskWorkspaceProvisioner {
 		normalizedTaskId: string,
 		spec: FleetTaskWorkspaceSpec,
 		leased: string[],
-		signal?: AbortSignal
+		signal?: AbortSignal,
+		cloneCredentials?: CloneCredentialProvider
 	): Promise<FleetTaskWorkspaceDescriptor> {
-		const primary = await this.provisionOne(normalizedTaskId, spec, leased, signal);
+		const primary = await this.provisionOne(normalizedTaskId, spec, leased, signal, cloneCredentials);
 		const mountSpecs = spec.mounts ?? [];
 		throwIfCancelled(signal);
 		// The primary worktree persists across runs, so `.mounts/` is
@@ -716,7 +719,7 @@ export class FleetTaskWorkspaceProvisioner {
 			});
 			let provisioned: FleetTaskWorkspaceDescriptor;
 			try {
-				provisioned = await this.provisionOne(normalizedTaskId, mountSpec, leased, signal);
+				provisioned = await this.provisionOne(normalizedTaskId, mountSpec, leased, signal, cloneCredentials);
 				// A read-only mount is a pristine reference by contract. The
 				// binding is reused in place without a reset, so whatever a
 				// model left in it would survive into the next run — and be
@@ -1036,7 +1039,8 @@ export class FleetTaskWorkspaceProvisioner {
 		normalizedTaskId: string,
 		spec: FleetTaskWorkspaceSpec,
 		leased: string[],
-		signal?: AbortSignal
+		signal?: AbortSignal,
+		cloneCredentials?: CloneCredentialProvider
 	): Promise<FleetTaskWorkspaceDescriptor> {
 		throwIfCancelled(signal);
 
@@ -1061,6 +1065,9 @@ export class FleetTaskWorkspaceProvisioner {
 		}
 
 		let handle: WorkspaceHandle;
+		// Mint outside the provider catch: authentication refusal is actionable,
+		// and must not be collapsed into the generic Git provisioning error.
+		const auth = cloneCredentials ? await cloneCredentials.authFor(spec.repoUrl) : undefined;
 		try {
 			handle = await this.plugin.provision({
 				repositoryId: spec.repositoryId,
@@ -1068,6 +1075,7 @@ export class FleetTaskWorkspaceProvisioner {
 				baseRef: spec.baseRef,
 				branch: spec.branch,
 				bindingKey,
+				...(auth ? { auth } : {}),
 				...(signal ? { signal } : {}),
 				settings: {
 					baseDir: repositoryRoot,

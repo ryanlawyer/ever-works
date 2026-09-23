@@ -316,9 +316,9 @@ export interface FleetPushAttribution {
 }
 
 /**
- * The short-lived write credential itself. Present ONLY when this job's
- * plan actually pushes (the platform re-reads its own `git.push`), so a
- * commit-only run never causes a write token to exist.
+ * A short-lived GitHub App installation credential. The push endpoint
+ * grants contents:write only for jobs whose plan publishes; the clone
+ * endpoint grants contents:read only for checkout.
  */
 export interface FleetPushCredential {
 	/**
@@ -333,7 +333,7 @@ export interface FleetPushCredential {
 	/** ISO-8601 instant GitHub says the token stops working. */
 	readonly expiresAt: string;
 	/**
-	 * The repositories this token can write, as normalized `owner/repo`.
+	 * The repositories this token covers, as normalized `owner/repo`.
 	 * The node refuses to offer the credential to any other remote.
 	 */
 	readonly repositories: readonly string[];
@@ -344,6 +344,11 @@ export interface FleetJobPushCredentialResponse {
 	readonly attribution: FleetPushAttribution;
 	/** Null when this job's plan commits but does not push. */
 	readonly push: FleetPushCredential | null;
+}
+
+/** A short-lived, repository-scoped contents:read token for checkout only. */
+export interface FleetJobCloneCredentialResponse {
+	readonly clone: FleetPushCredential;
 }
 
 /** The four Git identity fields a fleet commit is made with. */

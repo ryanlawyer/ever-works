@@ -2,6 +2,7 @@ import { performance } from 'node:perf_hooks';
 import type {
 	FleetJobKind,
 	FleetJobPushCredentialResponse,
+	FleetJobCloneCredentialResponse,
 	FleetJobView,
 	FleetRunEnvFileContent,
 	FleetRunEnvFileRequestRef
@@ -249,6 +250,7 @@ export interface JobLeaseCapableClient {
 	 * own credential helper instead.
 	 */
 	mintPushCredential?(jobId: string, leaseGeneration?: number): Promise<FleetJobPushCredentialResponse>;
+	mintCloneCredential?(jobId: string, leaseGeneration?: number): Promise<FleetJobCloneCredentialResponse>;
 }
 
 /**
@@ -342,6 +344,7 @@ export interface JobLeaseHandle {
 	 * publishes without the credential.
 	 */
 	mintPushCredential(): Promise<FleetJobPushCredentialResponse>;
+	mintCloneCredential(): Promise<FleetJobCloneCredentialResponse>;
 }
 
 /** The keep-alive as the LOOP sees it: the executor's half, plus control. */
@@ -1541,6 +1544,11 @@ export class WorkerLoop {
 							'This node cannot mint a scoped push credential (the job client predates the push-credential protocol)'
 						);
 					}
+					return mintFn.call(this.options.client, jobId, generation);
+				},
+				mintCloneCredential: async () => {
+					const mintFn = this.options.client.mintCloneCredential;
+					if (!mintFn) throw new Error('This node cannot mint a scoped clone credential');
 					return mintFn.call(this.options.client, jobId, generation);
 				}
 			}

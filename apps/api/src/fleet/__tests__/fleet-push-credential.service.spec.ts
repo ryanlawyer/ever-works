@@ -163,6 +163,50 @@ describe('FleetPushCredentialService', () => {
         else process.env.GITHUB_APP_PRIVATE_KEY = previousEnv.key;
     });
 
+    it('issues a read-only clone token for the primary and read-only mounts under the claimed owner', async () => {
+        fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue(githubOk({ token: TOKEN }));
+        const { service, jobs } = build({
+            job: jobRow({
+                payload: {
+                    ...(jobRow().payload as Record<string, unknown>),
+                    workspace: {
+                        repositoryId: 'ever-works/ever-works',
+                        repoUrl: 'https://github.com/ever-works/ever-works.git',
+                        mounts: [
+                            {
+                                repositoryId: 'ever-works/reference',
+                                repoUrl: 'https://github.com/ever-works/reference.git',
+                                writable: false,
+                            },
+                        ],
+                    },
+                },
+            }),
+            snapshots: {
+                'ever-works/ever-works': [snapshotRow('ever-works/ever-works', '556677')],
+                'ever-works/reference': [snapshotRow('ever-works/reference', '889900')],
+            },
+        });
+        const answer = await service.mintClone({
+            nodeId: NODE_ID,
+            secret: 'a'.repeat(32),
+            jobId: JOB_ID,
+            leaseGeneration: 4,
+        });
+        expect(jobs.authorizeRunSecretRequest).toHaveBeenCalledWith(
+            expect.objectContaining({ leaseGeneration: 4 }),
+        );
+        const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+        expect(JSON.parse(String(init.body))).toEqual({
+            repository_ids: [556677, 889900],
+            permissions: { contents: 'read' },
+        });
+        expect(answer?.clone.repositories).toEqual([
+            'ever-works/ever-works',
+            'ever-works/reference',
+        ]);
+    });
+
     describe('the scope is narrowed from platform state', () => {
         it('mints with repository_ids from the installation SNAPSHOT and contents:write only', async () => {
             fetchSpy = jest

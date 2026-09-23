@@ -481,7 +481,12 @@ describe('createNodeRuntime', () => {
 		await runtime.worker?.drained();
 		await runtime.worker?.stop();
 
-		expect(provisionWorkspace).toHaveBeenCalledWith('task-1', repositoryWorkspace, expect.any(AbortSignal));
+		expect(provisionWorkspace).toHaveBeenCalledWith(
+			'task-1',
+			repositoryWorkspace,
+			expect.any(AbortSignal),
+			expect.objectContaining({ authFor: expect.any(Function) })
+		);
 		expect(completedBodies).toHaveLength(1);
 		expect(completedBodies[0]).toMatchObject({ success: true, result: { workspace: descriptor } });
 	});
