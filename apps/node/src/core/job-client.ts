@@ -10,6 +10,7 @@ import type {
 	FleetJobMcpCredentialResponse,
 	FleetJobMcpCredentialRevokeResponse,
 	FleetJobPushCredentialResponse,
+	FleetJobCloneCredentialResponse,
 	FleetJobView,
 	FleetRunEnvFileContent,
 	FleetRunEnvFileRequestRef
@@ -371,6 +372,29 @@ export class FleetJobClient {
 		return payload;
 	}
 
+	async mintCloneCredential(jobId: string, leaseGeneration?: number): Promise<FleetJobCloneCredentialResponse> {
+		const body: Record<string, unknown> = { nodeId: this.nodeId, secret: this.secret };
+		if (leaseGeneration !== undefined) body.leaseGeneration = leaseGeneration;
+		const payload = (await this.post(
+			`api/fleet/jobs/${encodeURIComponent(jobId)}/clone-credential`,
+			'job-clone-credential',
+			body
+		)) as FleetJobCloneCredentialResponse;
+		const clone = payload?.clone;
+		if (
+			!clone ||
+			typeof clone.token !== 'string' ||
+			!clone.token ||
+			!Array.isArray(clone.repositories) ||
+			typeof clone.username !== 'string' ||
+			!clone.repositories.every((repo) => typeof repo === 'string')
+		) {
+			throw new FleetClientError('malformed', 'Clone credential response did not contain a usable token');
+		}
+		this.logger?.protect(clone.token);
+		return payload;
+	}
+
 	// ── Agent computers — the live-view publish leg ─────────────────────
 	//
 	// The node-facing half of a live view, under `api/internal/computer`:
@@ -541,6 +565,13 @@ export function errorForJobStatus(status: number, operation: string): FleetClien
 		return new FleetClientError(
 			'stale-lease',
 			'The platform holds a newer lease on this job (stale-lease); the claim this node is renewing or finalizing is void',
+			status
+		);
+	}
+	if (status === 422 && operation === 'job-clone-credential') {
+		return new FleetClientError(
+			'unresolved',
+			'The platform could not issue a read-only GitHub App credential for this checkout. Check that the job owner’s App installation includes the primary repository and every mount, then sync its repository list.',
 			status
 		);
 	}

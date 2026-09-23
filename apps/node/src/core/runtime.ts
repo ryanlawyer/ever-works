@@ -27,6 +27,7 @@ import {
 } from './workspaces/fleet-task-workspace';
 import { measureWorkspaceFreeBytes } from './workspaces/disk-headroom';
 import { PushCredentialSession } from './workspaces/push-credential';
+import { CloneCredentialSession } from './workspaces/clone-credential';
 import type { Logger } from './logger';
 import { PtyLocalPlugin } from '@ever-works/pty-local-plugin';
 import type { ITerminalStreamPlugin } from '@ever-works/plugin';
@@ -601,12 +602,31 @@ export function createNodeRuntime(config: NodeConfig, io: NodeIo, options: Creat
 						...(io.logger ? { logger: io.logger } : {})
 					})
 				: null;
+			const cloneCredentials = lease
+				? new CloneCredentialSession({
+						mint: () => lease.mintCloneCredential(),
+						...(io.logger ? { logger: io.logger } : {})
+					})
+				: null;
 			try {
 				return await runAgentTaskJob(
 					job,
 					{
-						provisionWorkspace: (taskId, spec, provisionSignal) =>
-							workspaceProvisioner.provision(taskId, spec, provisionSignal),
+						provisionWorkspace: async (taskId, spec, provisionSignal) => {
+							if (!cloneCredentials)
+								throw new Error('A claimed fleet lease is required for private repository checkout');
+							try {
+								return await workspaceProvisioner.provision(
+									taskId,
+									spec,
+									provisionSignal,
+									cloneCredentials
+								);
+							} finally {
+								// Revoke the read token before any model process starts.
+								await cloneCredentials.dispose();
+							}
+						},
 						...(workspaceProvisioner.finalize
 							? {
 									finalizeWorkspace: (taskId, descriptor, opts, finalizeSignal) =>
@@ -736,6 +756,7 @@ export function createNodeRuntime(config: NodeConfig, io: NodeIo, options: Creat
 					signal
 				);
 			} finally {
+				await cloneCredentials?.dispose();
 				// Every exit path this process can still execute: success, a
 				// reported failure, a thrown model step, an operator cancel
 				// and a lapsed lease all arrive here. The token is cleared

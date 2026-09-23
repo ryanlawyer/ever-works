@@ -20,6 +20,7 @@ import type {
     FleetJobMcpCredentialResponse,
     FleetJobMcpCredentialRevokeResponse,
     FleetJobPushCredentialResponse,
+    FleetJobCloneCredentialResponse,
 } from '@ever-works/contracts';
 import { FleetJobService, FleetRunCredentialService } from '@ever-works/agent/fleet';
 import { Public } from '../auth/decorators/public.decorator';
@@ -313,6 +314,35 @@ export class FleetJobsController {
         if (!response) {
             throw new UnauthorizedException('Invalid node credential');
         }
+        return response;
+    }
+
+    @Public()
+    @Post(':id/clone-credential')
+    @ApiOperation({
+        summary: 'Mint a repository-scoped contents:read credential for a claimed job checkout.',
+    })
+    @HttpCode(HttpStatus.OK)
+    @Throttle({ long: { limit: 60, ttl: 60_000 } })
+    async cloneCredential(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Body() body: FleetJobPushCredentialDto,
+    ): Promise<FleetJobCloneCredentialResponse> {
+        let response: FleetJobCloneCredentialResponse | null;
+        try {
+            response = await this.pushCredentials.mintClone({
+                nodeId: body.nodeId,
+                secret: body.secret,
+                jobId: id,
+                leaseGeneration: body.leaseGeneration,
+            });
+        } catch (error) {
+            if (error instanceof FleetPushCredentialError) {
+                throw new UnprocessableEntityException({ reason: error.reason });
+            }
+            throw error;
+        }
+        if (!response) throw new UnauthorizedException('Invalid node credential');
         return response;
     }
 

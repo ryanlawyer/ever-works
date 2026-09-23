@@ -480,6 +480,29 @@ describe('FleetJobClient scoped push credential', () => {
 
 		await expect(client.mintPushCredential(JOB, 7)).rejects.toMatchObject({ kind: 'stale-lease' });
 	});
+
+	it('mints checkout access using only the claim and protects the returned read token', async () => {
+		const protect = vi.fn();
+		let requestUrl = '';
+		let requestBody = '';
+		const client = clientWith(
+			async (url, init) => {
+				requestUrl = url;
+				requestBody = init.body;
+				return response(200, { clone: answer().push })(url, init);
+			},
+			{ protect }
+		);
+		await client.mintCloneCredential(JOB, 7);
+		expect(requestUrl).toContain(`/api/fleet/jobs/${JOB}/clone-credential`);
+		expect(JSON.parse(requestBody)).toEqual({ nodeId: NODE_ID, secret: SECRET, leaseGeneration: 7 });
+		expect(protect).toHaveBeenCalledWith(PUSH_TOKEN);
+	});
+
+	it('refuses an unscoped clone response', async () => {
+		const client = clientWith(response(200, { clone: { token: PUSH_TOKEN, username: 'x-access-token' } }));
+		await expect(client.mintCloneCredential(JOB, 7)).rejects.toMatchObject({ kind: 'malformed' });
+	});
 });
 
 describe('FleetJobClient lease kind filters (attended live-view lane)', () => {

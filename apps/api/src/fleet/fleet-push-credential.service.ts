@@ -9,6 +9,7 @@ import {
     normalizeFleetPushRepositoryId,
     sanitizeFleetPushIdentityText,
     type FleetJobPushCredentialResponse,
+    type FleetJobCloneCredentialResponse,
     type FleetPushAttribution,
 } from '@ever-works/contracts';
 import { FleetJobRepository, FleetNodeRepository, FleetJobService } from '@ever-works/agent/fleet';
@@ -232,6 +233,48 @@ export class FleetPushCredentialService {
         };
     }
 
+    /** Mint a read-only token for the primary checkout and every mount. */
+    async mintClone(input: {
+        nodeId: unknown;
+        secret: unknown;
+        jobId: string;
+        leaseGeneration?: unknown;
+    }): Promise<FleetJobCloneCredentialResponse | null> {
+        const claim = await this.jobs.authorizeRunSecretRequest(input);
+        if (!claim) return null;
+        const job = await this.jobRows.findById(claim.jobId);
+        if (!job) return null;
+        const scope = await this.resolveScope(claim.userId, this.repositoriesOf(job, true));
+        if (!scope.ok) throw this.refusal(claim.jobId, scope.reason);
+        const credentials = this.appCredentials();
+        if (!credentials)
+            throw this.refusal(claim.jobId, FLEET_PUSH_CREDENTIAL_NOT_CONFIGURED_REASON);
+        let minted: { token: string; expiresAt: string | null };
+        try {
+            minted = await requestGitHubAppInstallationAccessTokenDetails(
+                scope.installationId,
+                credentials,
+                { repositoryIds: scope.repositoryIds, permissions: { contents: 'read' } },
+            );
+        } catch (error) {
+            this.logger.error(
+                `Fleet job ${claim.jobId}: scoped clone token mint failed (${error instanceof Error ? error.name : 'unknown error'})`,
+            );
+            throw this.refusal(claim.jobId, FLEET_PUSH_CREDENTIAL_MINT_FAILED_REASON);
+        }
+        this.logger.log(
+            `Fleet job ${claim.jobId}: scoped clone credential minted for node ${claim.nodeId} covering ${scope.repositories.join(', ')}`,
+        );
+        return {
+            clone: {
+                token: minted.token,
+                username: FLEET_PUSH_CREDENTIAL_USERNAME,
+                expiresAt: minted.expiresAt ?? new Date(Date.now() + 55 * 60_000).toISOString(),
+                repositories: scope.repositories,
+            },
+        };
+    }
+
     /**
      * Can the platform mint a write credential for these repositories,
      * WITHOUT minting one?
@@ -403,9 +446,12 @@ export class FleetPushCredentialService {
      * owner's own repositories. It can never reach a repository, an
      * installation or an account the owner does not already hold.
      */
-    private repositoriesOf(job: {
-        payload?: Record<string, unknown> | null;
-    }): FleetPushRepositoryRequest[] {
+    private repositoriesOf(
+        job: {
+            payload?: Record<string, unknown> | null;
+        },
+        includeReadOnly = false,
+    ): FleetPushRepositoryRequest[] {
         const workspace = (
             job.payload as { workspace?: Record<string, unknown> } | null | undefined
         )?.workspace;
@@ -428,7 +474,7 @@ export class FleetPushCredentialService {
                 repoUrl?: unknown;
                 writable?: unknown;
             };
-            if (entry.writable === false) continue;
+            if (entry.writable === false && !includeReadOnly) continue;
             if (typeof entry.repositoryId === 'string') {
                 out.push({
                     repositoryId: entry.repositoryId,
