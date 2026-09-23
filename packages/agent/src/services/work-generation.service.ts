@@ -292,6 +292,13 @@ export class WorkGenerationService {
             ...updateDto,
         };
 
+        if (lastRequestData.pluginConfig && updateDto.pluginConfig) {
+            payload.pluginConfig = {
+                ...lastRequestData.pluginConfig,
+                ...updateDto.pluginConfig,
+            };
+        }
+
         // Deep-merge providers: overrides win per-field, but unset fields inherit from last run
         if (lastRequestData.providers && updateDto.providers) {
             payload.providers = {

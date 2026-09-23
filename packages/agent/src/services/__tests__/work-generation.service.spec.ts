@@ -2555,6 +2555,41 @@ describe('WorkGenerationService', () => {
             expect(payload.providers).toEqual({ ai: 'anthropic', search: 'tavily' });
         });
 
+        it('keeps previous pipeline settings when an Idea re-run enables screenshots', async () => {
+            const work = buildWork();
+            ownershipService.ensureCanEdit.mockResolvedValue({ work } as any);
+            dataGenerator.getConfig.mockResolvedValue({
+                metadata: {
+                    last_request_data: {
+                        name: 'X',
+                        prompt: 'original',
+                        pluginConfig: { target_items: 12, capture_screenshots: false },
+                    },
+                },
+            });
+            generationHistoryRepository.createEntry.mockResolvedValue({
+                id: 'h-1',
+                startedAt: new Date(),
+            } as any);
+            generationDispatcher.dispatchWorkGeneration.mockResolvedValue('run-1');
+
+            const service = buildService({ withDispatcher: true });
+            await service.updateItemsGenerator({
+                workId: 'work-1',
+                updateDto: { prompt: 'updated', pluginConfig: { capture_screenshots: true } },
+                user: buildUser(),
+                awaitCompletion: false,
+            });
+
+            const [{ dto: payload }] = generationDispatcher.dispatchWorkGeneration.mock.calls[0];
+            expect(payload.prompt).toBe('updated');
+            expect(generatorFormSchemaService.processFormConfig).toHaveBeenCalledWith(
+                undefined,
+                { target_items: 12, capture_screenshots: true },
+                { userId: buildUser().id, workId: 'work-1' },
+            );
+        });
+
         it('overrides config caps (max_search_queries/results/pages + AI-first off) for scheduled runs', async () => {
             // Pinned: scheduled runs use trimmed caps to keep cost
             // predictable. A future swap to "use whatever the user set"

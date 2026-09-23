@@ -127,6 +127,11 @@ export class CreateItemsGeneratorDto implements ICreateItemsGeneratorDto {
 }
 
 export class UpdateItemsGeneratorDto implements IUpdateItemsGeneratorDto {
+    @ApiPropertyOptional({ description: 'Pipeline configuration overrides for this run' })
+    @IsOptional()
+    @IsObject()
+    pluginConfig?: Record<string, unknown>;
+
     @ApiPropertyOptional({
         description:
             'Optional prompt override for THIS run — replaces the stored last-run ' +

@@ -404,6 +404,7 @@ describe('IdeaBuildExecutorService', () => {
                 'work-new',
                 expect.objectContaining({
                     prompt: expect.stringContaining('best AI tools'),
+                    pluginConfig: { capture_screenshots: true },
                 }),
                 expect.objectContaining({ id: 'user-1' }),
                 true,
@@ -440,6 +441,7 @@ describe('IdeaBuildExecutorService', () => {
                     workId: 'work-existing',
                     updateDto: expect.objectContaining({
                         prompt: expect.stringContaining('Also add pricing pages.'),
+                        pluginConfig: { capture_screenshots: true },
                     }),
                     awaitCompletion: true,
                     context: { triggeredBy: 'api' },

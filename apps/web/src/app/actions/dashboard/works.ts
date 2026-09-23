@@ -503,6 +503,12 @@ export async function createWorkWithAI(request: AIWorkOptions) {
             providers: request.providers || undefined,
             pluginConfig: {
                 ...(request.pluginConfig || {}),
+                // Idea builds include screenshots by default. Keep an explicit
+                // false from the form when the user turns this option off.
+                ...(validation.data.proposalId &&
+                request.pluginConfig?.capture_screenshots === undefined
+                    ? { capture_screenshots: true }
+                    : {}),
                 // Security: server-authoritative key listed AFTER the
                 // user-supplied spread so a malicious caller cannot override
                 // the generation target keywords via pluginConfig.

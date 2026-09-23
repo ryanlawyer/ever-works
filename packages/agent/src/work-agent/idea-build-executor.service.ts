@@ -274,7 +274,7 @@ export class IdeaBuildExecutorService {
         if (idea.targetWorkId) {
             await this.workGeneration!.updateItemsGenerator({
                 workId: idea.targetWorkId,
-                updateDto: { prompt } as never,
+                updateDto: { prompt, pluginConfig: { capture_screenshots: true } } as never,
                 user,
                 awaitCompletion: true,
                 context: { triggeredBy: 'api' },
@@ -297,7 +297,11 @@ export class IdeaBuildExecutorService {
         }
         await this.workGeneration!.generateItems(
             workId,
-            { name: idea.title.slice(0, 120), prompt } as never,
+            {
+                name: idea.title.slice(0, 120),
+                prompt,
+                pluginConfig: { capture_screenshots: true },
+            } as never,
             user,
             true,
             { triggeredBy: 'api' },
