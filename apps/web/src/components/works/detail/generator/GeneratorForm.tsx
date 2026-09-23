@@ -71,8 +71,12 @@ export function GeneratorForm({
     const fetchVersionRef = useRef(0);
     const lastFetchedPipelineRef = useRef<string | undefined>(undefined);
 
-    // Check if work has been generated before
-    const isGenerated = !!config?.metadata;
+    // A completed Work can have a stale or missing config cache even when its
+    // generated items are present. Keep the update/recreate controls available.
+    const isGenerated =
+        !!config?.metadata ||
+        work.generateStatus?.status === GenerateStatusType.GENERATED ||
+        (work.itemsCount ?? 0) > 0;
     const isWebsiteTemplateLocked = work.websiteRepositoryInitialized ?? false;
     const [templateSwitchModeEnabled, setTemplateSwitchModeEnabled] = useState(false);
     const lastRequestData = config?.metadata?.last_request_data;
