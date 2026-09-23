@@ -1,4 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type {
 	BrowserActResult,
 	BrowserActStep,
@@ -12,6 +14,7 @@ import type {
 	BrowserSessionHandle,
 	BrowserSessionSpec,
 	IBrowserAutomationPlugin,
+	IScreenshotPlugin,
 	IPlugin,
 	JsonSchema,
 	PluginCategory,
@@ -19,6 +22,8 @@ import type {
 	PluginHealthCheck,
 	PluginManifest,
 	PluginSettings,
+	ScreenshotOptions,
+	ScreenshotResult,
 	ValidationError,
 	ValidationResult
 } from '@ever-works/plugin';
@@ -84,12 +89,12 @@ interface Session {
  * dynamic import: a runtime without a browser degrades to a loud
  * {@link BrowserAutomationNotProvisionedError}, never a module-load crash.
  */
-export class BrowserAutomationPlugin implements IPlugin, IBrowserAutomationPlugin {
+export class BrowserAutomationPlugin implements IPlugin, IBrowserAutomationPlugin, IScreenshotPlugin {
 	readonly id = 'browser-automation';
 	readonly name = 'Browser Automation';
 	readonly version = '1.0.0';
 	readonly category: PluginCategory = 'utility';
-	readonly capabilities: readonly string[] = ['browser-automation'];
+	readonly capabilities: readonly string[] = ['browser-automation', 'screenshot'];
 	readonly providerName = 'Playwright (Chromium)';
 
 	readonly settingsSchema: JsonSchema = {
@@ -289,6 +294,41 @@ export class BrowserAutomationPlugin implements IPlugin, IBrowserAutomationPlugi
 			contentType: format === 'jpeg' ? 'image/jpeg' : 'image/png',
 			bytes: bytes.byteLength
 		};
+	}
+
+	/** Capture public web pages locally and persist the PNG on the existing uploads volume. */
+	async capture(options: ScreenshotOptions): Promise<ScreenshotResult> {
+		let handle: BrowserSessionHandle | undefined;
+		try {
+			const width = Math.min(1920, Math.max(320, Math.trunc(options.viewportWidth ?? 1280)));
+			const height = Math.min(1200, Math.max(200, Math.trunc(options.viewportHeight ?? 800)));
+			// Captures are served publicly, so never inherit the automation plugin's
+			// private-network or headed-browser escape hatches.
+			handle = await this.open({
+				viewport: { width, height },
+				settings: { ...options.settings, allowPrivateNetwork: false, headless: true }
+			});
+			await this.navigate(handle, options.url);
+			if (options.delay) await this.act(handle, [{ kind: 'wait', timeoutMs: Math.min(5000, Math.max(1, options.delay)) }]);
+			const result = await this.screenshot(handle, { format: 'png', fullPage: options.fullPage === true });
+			const imageBuffer = Buffer.from(result.base64, 'base64');
+			if (imageBuffer.length > 10 * 1024 * 1024) throw new Error('Screenshot exceeds the 10 MiB limit');
+			const hash = createHash('sha256').update(imageBuffer).digest('hex');
+			const root = join(process.env.UPLOADS_DIR || '/var/lib/ever-works/uploads', 'screenshots');
+			await mkdir(root, { recursive: true });
+			await writeFile(join(root, `${hash}.png`), imageBuffer, { flag: 'wx' }).catch((error: NodeJS.ErrnoException) => {
+				if (error.code !== 'EEXIST') throw error;
+			});
+			return { success: true, imageBuffer, cacheUrl: `/api/uploads/screenshots/${hash}.png`, width, height, fileSize: imageBuffer.length };
+		} catch (error) {
+			return { success: false, error: error instanceof Error ? error.message : String(error) };
+		} finally {
+			if (handle) await this.close(handle);
+		}
+	}
+
+	async isAvailable(): Promise<boolean> {
+		return (await this.probe()).ok;
 	}
 
 	async act(handle: BrowserSessionHandle, steps: readonly BrowserActStep[]): Promise<BrowserActResult> {
@@ -607,7 +647,7 @@ export class BrowserAutomationPlugin implements IPlugin, IBrowserAutomationPlugi
 			// carry, so it is installed on enable.
 			builtIn: false,
 			distribution: 'registry',
-			defaultForCapabilities: ['browser-automation'],
+			defaultForCapabilities: ['browser-automation', 'screenshot'],
 			icon: { type: 'lucide', value: 'Globe', backgroundColor: '#0f172a' }
 		};
 	}

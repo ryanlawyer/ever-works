@@ -1662,6 +1662,10 @@ importers:
         version: 4.1.0(@opentelemetry/api@1.9.1)(@types/node@22.19.11)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@22.19.11)(typescript@5.9.3))(vite@8.0.16(@types/node@22.19.11)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(yaml@2.8.3))
 
   packages/plugins/browser-automation:
+    dependencies:
+      playwright-core:
+        specifier: ^1.59.1
+        version: 1.59.1
     devDependencies:
       '@ever-works/plugin':
         specifier: workspace:*
@@ -1678,11 +1682,6 @@ importers:
       vitest:
         specifier: ^4.1.0
         version: 4.1.0(@opentelemetry/api@1.9.1)(@types/node@22.19.11)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@22.19.11)(typescript@5.9.3))(vite@8.0.16(@types/node@22.19.11)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(yaml@2.8.3))
-    optionalDependencies:
-      playwright-core:
-        specifier: ^1.59.1
-        version: 1.59.1
-
   packages/plugins/claude-code:
     devDependencies:
       '@ever-works/plugin':

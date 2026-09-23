@@ -288,6 +288,15 @@ describe('ScreenshotFacadeService', () => {
     });
 
     describe('getSmartImage', () => {
+		it('reports provider capture failures to the generation pipeline', async () => {
+			const screenshotPlugin = createMockScreenshotPlugin('browser-automation', 'Local Chromium');
+			(screenshotPlugin.capture as jest.Mock).mockResolvedValue({ success: false, error: 'Navigation blocked' });
+			registry.getByCapability.mockReturnValue([
+				createRegisteredPlugin(screenshotPlugin, { capabilities: ['screenshot'] }),
+			]);
+			await expect(service.getSmartImage({ url: 'https://example.com' }, defaultFacadeOptions))
+				.rejects.toThrow('Navigation blocked');
+		});
         it('should return smart image result with default capture settings', async () => {
             const screenshotPlugin = createMockScreenshotPlugin('screenshotone', 'ScreenshotOne');
             const registered = createRegisteredPlugin(screenshotPlugin, {

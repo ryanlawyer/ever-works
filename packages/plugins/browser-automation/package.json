@@ -34,7 +34,7 @@
 	"peerDependencies": {
 		"@ever-works/plugin": "workspace:*"
 	},
-	"optionalDependencies": {
+	"dependencies": {
 		"playwright-core": "^1.59.1"
 	},
 	"devDependencies": {
@@ -51,7 +51,8 @@
 			"version": "1.0.0",
 			"category": "utility",
 			"capabilities": [
-				"browser-automation"
+				"browser-automation",
+				"screenshot"
 			],
 			"description": "Drives a headless Chromium via Playwright: navigate, extract text/HTML/attributes by CSS selector, capture screenshots, and run bounded interaction steps. Every navigation and every redirect hop is checked against a default-deny host allowlist and an SSRF guard, so the browser can never be pointed at internal hosts.",
 			"author": {
@@ -62,7 +63,8 @@
 			"builtIn": false,
 			"visibility": "public",
 			"defaultForCapabilities": [
-				"browser-automation"
+				"browser-automation",
+				"screenshot"
 			],
 			"envVars": [
 				{
