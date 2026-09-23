@@ -1,9 +1,27 @@
 'use server';
 
 import { oauthAPI, gitProvidersAPI } from '@/lib/api';
-import { setOAuthStateCookie } from '@/lib/auth';
+import { setOAuthPluginIntentCookie, setOAuthStateCookie } from '@/lib/auth';
 import { ROUTES, routeWithParams, withAppUrl } from '@/lib/constants';
 import { isValidRedirectUrl } from '@/lib/utils';
+
+/** The GitHub OAuth app has this exact redirect URI registered. */
+function pluginCallbackUrl(providerId: string, returnPath?: string, readPackages = false) {
+    const callbackPath = routeWithParams(
+        readPackages && providerId !== 'github'
+            ? ROUTES.API_OAUTH_READ_PACKAGES_CALLBACK
+            : ROUTES.API_OAUTH_PLUGINS_CALLBACK,
+        { providerId },
+    );
+    const registeredReturnPath = ROUTES.DASHBOARD_SETTINGS_PLUGIN_CATEGORY('git-provider');
+    const callbackReturnPath = providerId === 'github' ? registeredReturnPath : returnPath;
+    return (
+        withAppUrl(callbackPath) +
+        (callbackReturnPath
+            ? `?returnPath=${encodeURIComponent(callbackReturnPath)}`
+            : '')
+    );
+}
 
 export async function checkGitProviderConnection(providerId: string) {
     try {
@@ -59,14 +77,7 @@ export async function connectOAuthProvider(
                 ? returnPath
                 : undefined;
 
-        const params = new URLSearchParams();
-        if (safeReturnPath) {
-            params.append('returnPath', safeReturnPath);
-        }
-
-        const queryString = params.toString();
-        const callbackPath = routeWithParams(ROUTES.API_OAUTH_PLUGINS_CALLBACK, { providerId });
-        const callbackUrl = withAppUrl(callbackPath) + (queryString ? `?${queryString}` : '');
+        const callbackUrl = pluginCallbackUrl(providerId, safeReturnPath);
 
         // C-03 parity with /api/oauth/:p/url: let the API mint the CSRF state
         // nonce, then mirror it into the host-scoped `oauth_state` cookie so
@@ -74,6 +85,12 @@ export async function connectOAuthProvider(
         // OAuth provider echoes back.
         const response = await oauthAPI.getConnectUrl(providerId, callbackUrl, forceConsent);
         await setOAuthStateCookie(response.state);
+        await setOAuthPluginIntentCookie({
+            state: response.state,
+            providerId,
+            returnPath: safeReturnPath || ROUTES.DASHBOARD_SETTINGS_PLUGIN_CATEGORY('git-provider'),
+            mode: 'connect',
+        });
 
         return { success: true, url: response.url, state: response.state };
     } catch (error) {
@@ -122,16 +139,7 @@ export async function connectReadPackagesOAuthProvider(
                 ? returnPath
                 : undefined;
 
-        const params = new URLSearchParams();
-        if (safeReturnPath) {
-            params.append('returnPath', safeReturnPath);
-        }
-
-        const queryString = params.toString();
-        const callbackPath = routeWithParams(ROUTES.API_OAUTH_READ_PACKAGES_CALLBACK, {
-            providerId,
-        });
-        const callbackUrl = withAppUrl(callbackPath) + (queryString ? `?${queryString}` : '');
+        const callbackUrl = pluginCallbackUrl(providerId, safeReturnPath, true);
 
         // C-03 parity: API mints the state nonce; web mirrors it into the
         // host-scoped cookie before redirecting to the OAuth provider.
@@ -141,6 +149,12 @@ export async function connectReadPackagesOAuthProvider(
             forceConsent,
         );
         await setOAuthStateCookie(response.state);
+        await setOAuthPluginIntentCookie({
+            state: response.state,
+            providerId,
+            returnPath: safeReturnPath || ROUTES.DASHBOARD_SETTINGS_PLUGIN_CATEGORY('git-provider'),
+            mode: 'read_packages',
+        });
 
         return { success: true, url: response.url, state: response.state };
     } catch (error) {
