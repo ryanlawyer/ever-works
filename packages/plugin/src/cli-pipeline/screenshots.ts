@@ -31,11 +31,11 @@ export async function captureScreenshots(items: ItemData[], ctx: ScreenshotConte
 	const errors: string[] = [];
 
 	try {
-		const itemsNeedingImages = items.filter(
-			(item) => item.source_url && (!item.images || item.images.length === 0)
-		);
+		// An AI-supplied image URL may be stale or broken. When screenshot capture is
+		// enabled, capture the source page for every item and make it the primary image.
+		const itemsWithSourceUrl = items.filter((item) => item.source_url);
 
-		for (const item of itemsNeedingImages) {
+		for (const item of itemsWithSourceUrl) {
 			if (ctx.signal.aborted) break;
 
 			// Security (SSRF): source_url is AI-generated and may contain
@@ -56,7 +56,10 @@ export async function captureScreenshots(items: ItemData[], ctx: ScreenshotConte
 				);
 
 				if (result.primaryImage) {
-					(item as { images?: string[] }).images = [result.primaryImage, ...(item.images || [])];
+					(item as { images?: string[] }).images = [
+						result.primaryImage,
+						...(item.images || []).filter((image) => image !== result.primaryImage)
+					];
 				}
 			} catch (error) {
 				const reason = error instanceof Error ? error.message : 'Unknown error';

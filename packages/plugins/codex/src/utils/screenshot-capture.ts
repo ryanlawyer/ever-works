@@ -1,4 +1,5 @@
 import type { FacadeOptions, ItemData, StepStatus } from '@ever-works/plugin';
+import { isSafeWebhookUrl } from '@ever-works/plugin/helpers/ssrf-guard';
 import { delay } from './pipeline-helpers.js';
 
 const IMAGE_CAPTURE_DELAY_MS = 500;
@@ -25,13 +26,15 @@ export async function captureScreenshots(items: ItemData[], ctx: ScreenshotConte
 	const errors: string[] = [];
 
 	try {
-		const itemsNeedingImages = items.filter(
-			(item) => item.source_url && (!item.images || item.images.length === 0)
-		);
+		const itemsWithSourceUrl = items.filter((item) => item.source_url);
 
-		for (const item of itemsNeedingImages) {
+		for (const item of itemsWithSourceUrl) {
 			if (ctx.signal.aborted) {
 				break;
+			}
+			if (!isSafeWebhookUrl(item.source_url!)) {
+				ctx.logger.warn(`Skipping unsafe/blocked source URL for screenshot: ${item.source_url}`);
+				continue;
 			}
 
 			try {
@@ -41,7 +44,10 @@ export async function captureScreenshots(items: ItemData[], ctx: ScreenshotConte
 				);
 
 				if (result.primaryImage) {
-					(item as { images?: string[] }).images = [result.primaryImage, ...(item.images || [])];
+					(item as { images?: string[] }).images = [
+						result.primaryImage,
+						...(item.images || []).filter((image) => image !== result.primaryImage)
+					];
 				}
 			} catch (error) {
 				const reason = error instanceof Error ? error.message : 'Unknown error';
