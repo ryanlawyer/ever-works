@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { PluginContext } from '@ever-works/plugin';
 import { BrowserAutomationNotProvisionedError, BrowserNavigationBlockedError } from '@ever-works/plugin';
 import BrowserAutomationDefaultExport, { BrowserAutomationPlugin } from '../index.js';
@@ -279,8 +282,8 @@ describe('plugin shape', () => {
 		const { plugin } = makePlugin();
 		const manifest = plugin.getManifest();
 		expect(manifest.id).toBe(plugin.id);
-		expect(manifest.capabilities).toEqual(['browser-automation']);
-		expect(manifest.defaultForCapabilities).toEqual(['browser-automation']);
+		expect(manifest.capabilities).toEqual(['browser-automation', 'screenshot']);
+		expect(manifest.defaultForCapabilities).toEqual(['browser-automation', 'screenshot']);
 	});
 });
 
@@ -601,6 +604,25 @@ describe('extract', () => {
 });
 
 describe('screenshot', () => {
+	it('captures a public page into durable local storage and refuses private targets', async () => {
+		const root = await mkdtemp(join(tmpdir(), 'ever-works-captures-'));
+		const previous = process.env.UPLOADS_DIR;
+		process.env.UPLOADS_DIR = root;
+		try {
+			const { plugin } = makePlugin();
+			const captured = await plugin.capture({ url: 'https://example.com/', settings: ALLOW_EXAMPLE });
+			expect(captured.success).toBe(true);
+			expect(captured.cacheUrl).toMatch(/^\/api\/uploads\/screenshots\/[0-9a-f]{64}\.png$/);
+			const filename = captured.cacheUrl!.split('/').at(-1)!;
+			expect(await readFile(join(root, 'screenshots', filename))).toEqual(Buffer.from('page-shot'));
+			const blocked = await plugin.capture({ url: 'http://127.0.0.1/', settings: { allowedHosts: ['127.0.0.1'], allowPrivateNetwork: true } });
+			expect(blocked.success).toBe(false);
+		} finally {
+			if (previous === undefined) delete process.env.UPLOADS_DIR;
+			else process.env.UPLOADS_DIR = previous;
+			await rm(root, { recursive: true, force: true });
+		}
+	});
 	it('captures the page as base64 PNG by default', async () => {
 		const { plugin } = makePlugin();
 		const handle = await plugin.open({ settings: ALLOW_EXAMPLE });

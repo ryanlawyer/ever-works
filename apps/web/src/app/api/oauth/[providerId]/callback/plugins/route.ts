@@ -1,7 +1,12 @@
 import { redirect } from '@/i18n/navigation';
 import { oauthAPI } from '@/lib/api';
 import { OAuthProvider } from '@/lib/api/enums';
-import { getOAuthStateCookie, removeOAuthStateCookie } from '@/lib/auth';
+import {
+    getOAuthPluginIntentCookie,
+    getOAuthStateCookie,
+    removeOAuthPluginIntentCookie,
+    removeOAuthStateCookie,
+} from '@/lib/auth';
 import { ROUTES } from '@/lib/constants';
 import { isValidRedirectUrl } from '@/lib/utils';
 import { getLocale } from 'next-intl/server';
@@ -16,7 +21,16 @@ export async function GET(
     const queryParams = request.nextUrl.searchParams;
     const code = queryParams.get('code');
     const state = queryParams.get('state');
-    const returnPath = queryParams.get('returnPath');
+    const storedIntent = await getOAuthPluginIntentCookie();
+    await removeOAuthPluginIntentCookie();
+    const matchingIntent =
+        storedIntent?.state === state && storedIntent.providerId === providerId
+            ? storedIntent
+            : null;
+    // The state-bound intent takes precedence over the callback's fixed
+    // returnPath. Query-string returnPath remains available for older flows.
+    const returnPath = matchingIntent?.returnPath ?? queryParams.get('returnPath');
+    const isReadPackages = matchingIntent?.mode === 'read_packages';
     const defaultPath = ROUTES.DASHBOARD_SETTINGS_PLUGIN_CATEGORY('git-provider');
     // Security: `returnPath` is attacker-controllable (it round-trips through the
     // OAuth callback query string). Although `appendQueryParams` already strips
@@ -78,16 +92,22 @@ export async function GET(
     // next-intl's redirect() throws a NEXT_REDIRECT control flow exception internally.
     let href: string;
     try {
-        await oauthAPI.connectCallback(providerId, code, state);
+        if (isReadPackages) {
+            await oauthAPI.readPackagesCallback(providerId, code, state);
+        } else {
+            await oauthAPI.connectCallback(providerId, code, state);
+        }
         href = appendQueryParams(targetPath, {
             oauth_connected: 'true',
             oauth_provider: providerId,
+            oauth_intent: isReadPackages ? 'read_packages' : undefined,
         });
     } catch (error) {
         console.error(`Failed to connect OAuth provider ${providerId}:`, error);
         href = appendQueryParams(targetPath, {
             oauth_error: getOAuthRouteErrorCode(error, 'oauth_connect_failed'),
             oauth_provider: providerId,
+            oauth_intent: isReadPackages ? 'read_packages' : undefined,
         });
     }
 

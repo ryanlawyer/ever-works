@@ -3,6 +3,7 @@ jest.mock('node:fs/promises', () => ({
 }));
 
 import { WebsiteGeneratorService } from './website-generator.service';
+import * as fs from 'node:fs/promises';
 import { WebsiteUpdateService } from './website-update.service';
 import { WebsiteRepositoryCreationMethod } from '../../items-generator/dto/create-items-generator.dto';
 import type { GitFacadeService } from '../../facades/git.facade';
@@ -67,7 +68,7 @@ describe('WebsiteGeneratorService', () => {
                 fullName: 'acme/test-work-web',
             } as any),
             getCloneUrl: jest.fn().mockReturnValue('https://github.com/acme/test-work-web.git'),
-            getLocalDir: jest.fn().mockReturnValue('/tmp/test-work-web'),
+            getLocalDir: jest.fn().mockResolvedValue('/tmp/test-work-web'),
             replaceRemote: jest.fn().mockResolvedValue(undefined),
             push: jest.fn().mockResolvedValue(undefined),
             updateRepository: jest.fn().mockResolvedValue({} as any),
@@ -87,6 +88,22 @@ describe('WebsiteGeneratorService', () => {
                 results: [],
             }),
         }) as unknown as jest.Mocked<BranchSyncService>;
+
+    it('waits for the website checkout path before cleaning it', async () => {
+        const gitFacade = createGitFacadeMock();
+        const service = new WebsiteGeneratorService(
+            gitFacade,
+            createBranchSyncMock(),
+            createTemplateResolverMock(),
+        );
+
+        await service.cleanup(createWork());
+
+        expect(fs.rm).toHaveBeenCalledWith('/tmp/test-work-web', {
+            recursive: true,
+            force: true,
+        });
+    });
 
     it('reasserts the template default branch after create-using-template sync', async () => {
         const gitFacade = createGitFacadeMock();

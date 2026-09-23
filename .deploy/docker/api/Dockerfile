@@ -119,6 +119,10 @@ RUN if [ "$PLUGIN_DISTRIBUTION_MODE" = "dynamic" ]; then \
 #-- Production
 FROM node:22-alpine
 
+# Local screenshot provider: Playwright uses the system Chromium build.
+RUN apk add --no-cache chromium font-liberation nss freetype harfbuzz ca-certificates
+ENV PLUGIN_BROWSER_AUTOMATION_EXECUTABLE_PATH=/usr/bin/chromium
+
 USER node
 WORKDIR /app
 

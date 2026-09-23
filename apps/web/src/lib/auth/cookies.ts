@@ -88,6 +88,53 @@ export async function removeOAuthStateCookie() {
     cookieStore.delete('oauth_state');
 }
 
+export type OAuthPluginIntent = {
+    state: string;
+    providerId: string;
+    returnPath: string;
+    mode: 'connect' | 'read_packages';
+};
+
+/** Keep the GitHub redirect URI fixed while preserving the requested return page. */
+export async function setOAuthPluginIntentCookie(intent: OAuthPluginIntent) {
+    const cookieStore = await cookies();
+    cookieStore.set('oauth_plugin_intent', JSON.stringify(intent), {
+        ...cookieOptions,
+        maxAge: 60 * 10,
+    });
+}
+
+export async function getOAuthPluginIntentCookie(): Promise<OAuthPluginIntent | null> {
+    const cookieStore = await cookies();
+    const value = cookieStore.get('oauth_plugin_intent')?.value;
+    if (!value) return null;
+    try {
+        const intent: unknown = JSON.parse(value);
+        if (
+            intent &&
+            typeof intent === 'object' &&
+            'state' in intent &&
+            typeof intent.state === 'string' &&
+            'providerId' in intent &&
+            typeof intent.providerId === 'string' &&
+            'returnPath' in intent &&
+            typeof intent.returnPath === 'string' &&
+            'mode' in intent &&
+            (intent.mode === 'connect' || intent.mode === 'read_packages')
+        ) {
+            return intent as OAuthPluginIntent;
+        }
+    } catch {
+        // A malformed cookie cannot control the callback destination.
+    }
+    return null;
+}
+
+export async function removeOAuthPluginIntentCookie() {
+    const cookieStore = await cookies();
+    cookieStore.delete('oauth_plugin_intent');
+}
+
 // =================
 // Redirects
 // =================

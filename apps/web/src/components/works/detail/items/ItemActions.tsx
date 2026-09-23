@@ -95,6 +95,10 @@ export const ItemActions = memo(function ItemActions({
             toast.error(t('screenshot.noSourceUrl', { defaultValue: 'No source URL available' }));
             return;
         }
+        if (!item.slug) {
+            toast.error(t('screenshot.failed', { defaultValue: 'Failed to capture screenshot' }));
+            return;
+        }
 
         setIsCapturingScreenshot(true);
         try {
@@ -104,13 +108,18 @@ export const ItemActions = memo(function ItemActions({
             });
 
             if (result.success && result.imageUrl) {
-                // Update the item's images with the new screenshot
                 const currentImages = item.images || [];
-                if (!currentImages.includes(result.imageUrl)) {
-                    onUpdate?.({
-                        images: [result.imageUrl, ...currentImages],
-                    });
+                const updateResult = await updateItem(workId, {
+                    item_slug: item.slug,
+                    screenshot_url: result.imageUrl,
+                });
+                if (updateResult.status !== 'success') {
+                    toast.error(updateResult.message || t('screenshot.failed'));
+                    return;
                 }
+                onUpdate?.({
+                    images: [result.imageUrl, ...currentImages.filter((url) => url !== result.imageUrl)],
+                });
                 toast.success(
                     result.message ||
                         t('screenshot.success', { defaultValue: 'Screenshot captured' }),

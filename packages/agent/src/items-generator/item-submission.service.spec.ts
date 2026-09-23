@@ -1255,6 +1255,31 @@ describe('ItemSubmissionService', () => {
     });
 
     describe('updateItem', () => {
+        it('prepends a captured screenshot without discarding existing images', async () => {
+            const screenshot = '/api/uploads/screenshots/' + 'a'.repeat(64) + '.png';
+            const dataRepo = makeDataRepoMock({
+                getItem: jest.fn().mockResolvedValue({
+                    name: 'Tool A',
+                    source_url: 'https://example.com',
+                    images: ['https://example.com/old.png', screenshot],
+                }),
+                updateItemMetadata: jest.fn().mockResolvedValue({ name: 'Tool A' }),
+            });
+            dataRepoCreateMock.mockResolvedValue(dataRepo);
+            const { service } = makeService();
+
+            const result = await service.updateItem(
+                makeWork() as any,
+                makeUser() as any,
+                { item_slug: 'tool-a', screenshot_url: screenshot } as any,
+            );
+
+            expect(result.status).toBe('success');
+            expect(dataRepo.updateItemMetadata).toHaveBeenCalledWith('tool-a', {
+                images: [screenshot, 'https://example.com/old.png'],
+            });
+        });
+
         it('returns error envelope when existingItem is null', async () => {
             const dataRepo = makeDataRepoMock({
                 getItem: jest.fn().mockResolvedValue(null),

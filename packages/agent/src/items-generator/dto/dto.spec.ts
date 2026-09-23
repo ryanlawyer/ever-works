@@ -184,6 +184,19 @@ describe('items-generator/dto', () => {
 
     // ───────────────────────────────────────────────────────────────────
     describe('UpdateItemDto', () => {
+        it('accepts captured local and HTTPS screenshot URLs and rejects unsafe schemes', async () => {
+            const local = '/api/uploads/screenshots/' + 'a'.repeat(64) + '.png';
+            for (const screenshot_url of [local, 'https://images.example.com/capture.png']) {
+                const { errors } = await validateDto(UpdateItemDto, { item_slug: 'foo', screenshot_url });
+                expect(errors).toEqual([]);
+            }
+            const { errors } = await validateDto(UpdateItemDto, {
+                item_slug: 'foo',
+                screenshot_url: 'javascript:alert(1)',
+            });
+            expect(constraintNames(errors)).toContain('matches');
+        });
+
         it('accepts a minimal payload (just item_slug)', async () => {
             const { errors } = await validateDto(UpdateItemDto, { item_slug: 'foo' });
             expect(errors).toEqual([]);

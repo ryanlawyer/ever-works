@@ -46,6 +46,17 @@ export class UpdateItemDto implements IUpdateItemDto {
     order?: number;
 
     @ApiPropertyOptional({
+        description: 'Captured screenshot URL to prepend to the item images',
+    })
+    @IsOptional()
+    @IsString()
+    @MaxLength(2048)
+    @Matches(/^(?:https:\/\/[^\s]+|\/api\/uploads\/screenshots\/[a-f0-9]{64}\.png)$/, {
+        message: 'screenshot_url must be an HTTPS URL or a local captured screenshot path',
+    })
+    screenshot_url?: string;
+
+    @ApiPropertyOptional({
         description: 'Whether to create a pull request for this change',
         default: false,
     })

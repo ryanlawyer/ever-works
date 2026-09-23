@@ -163,10 +163,10 @@ function toDiffFile(file: {
 
 function sanitizeDescription(description?: string): string {
 	if (!description) return '';
-	return description
-		.replace(/[\r\n]+/g, ' ')
-		.trim()
-		.slice(0, 500);
+	// GitHub rejects repository descriptions longer than 350 characters.
+	// Idea descriptions can be much longer, so keep repository metadata short
+	// while preserving the complete description on the Work itself.
+	return Array.from(description.replace(/\s+/g, ' ').trim()).slice(0, 350).join('');
 }
 
 export class GitHubApiService {

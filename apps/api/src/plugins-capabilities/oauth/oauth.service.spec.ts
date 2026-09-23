@@ -277,6 +277,20 @@ describe('OAuthService', () => {
             });
         });
 
+        it('resolves an asynchronous plugin authorization URL before returning it', async () => {
+            pluginSettingsService.getSettings.mockResolvedValue(validSettings);
+            oauthFacade.getAuthorizationUrl.mockResolvedValue('https://provider/auth?state=abc');
+
+            await expect(
+                service.getOAuthUrl({
+                    userId: 'user-1',
+                    providerId: 'github',
+                    redirectUri: 'https://app/cb',
+                    state: 'abc',
+                }),
+            ).resolves.toEqual({ url: 'https://provider/auth?state=abc', state: 'abc' });
+        });
+
         it('generates random state when none provided (16 bytes hex)', async () => {
             pluginSettingsService.getSettings.mockResolvedValue(validSettings);
             oauthFacade.getAuthorizationUrl.mockReturnValue('https://provider/auth');
@@ -502,7 +516,7 @@ describe('OAuthService', () => {
 
             const result = await service.handleOAuthCallback('user-1', 'github', 'code');
 
-            expect(result.enabled).toBe(false);
+            expect(result).toMatchObject({ enabled: false });
         });
 
         it('throws BadRequestException when settings missing clientId/clientSecret', async () => {
@@ -523,6 +537,30 @@ describe('OAuthService', () => {
                 'invalid_grant',
             );
             expect(authAccountRepository.upsertProviderAccount).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('getReadPackagesOAuthUrl', () => {
+        it('resolves an asynchronous authorization URL with the packages scopes', async () => {
+            pluginSettingsService.getSettings.mockResolvedValue({
+                clientId: 'cid',
+                clientSecret: 'csecret',
+            });
+            oauthFacade.getAuthorizationUrl.mockResolvedValue('https://provider/packages');
+
+            await expect(
+                service.getReadPackagesOAuthUrl({
+                    userId: 'user-1',
+                    providerId: 'github',
+                    redirectUri: 'https://app/cb',
+                    state: 'packages-state',
+                }),
+            ).resolves.toEqual({ url: 'https://provider/packages', state: 'packages-state' });
+            expect(oauthFacade.getAuthorizationUrl).toHaveBeenCalledWith(
+                'github',
+                'packages-state',
+                expect.objectContaining({ scopes: ['read:packages', 'write:packages'] }),
+            );
         });
     });
 

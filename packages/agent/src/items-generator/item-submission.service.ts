@@ -626,6 +626,7 @@ export class ItemSubmissionService {
                 featured?: boolean;
                 order?: number;
                 source_url?: string;
+                images?: string[];
                 health?: { status: 'unchecked' };
                 source_validation?: undefined;
                 markdown?: string;
@@ -641,6 +642,15 @@ export class ItemSubmissionService {
 
             if (updateItemDto.source_url !== undefined) {
                 itemUpdates.source_url = updateItemDto.source_url;
+            }
+
+            if (typeof updateItemDto.screenshot_url === 'string') {
+                itemUpdates.images = [
+                    updateItemDto.screenshot_url,
+                    ...(existingItem.images || []).filter(
+                        (url) => url !== updateItemDto.screenshot_url,
+                    ),
+                ];
             }
 
             if (sourceUrlChanged) {

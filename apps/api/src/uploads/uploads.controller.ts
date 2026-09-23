@@ -32,6 +32,8 @@ import {
     type OwnershipScope,
 } from '@ever-works/agent/database';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/user.decorator';
@@ -119,6 +121,31 @@ export class UploadsController {
         private readonly tenantRepository?: TenantRepository,
         private readonly apiKeyService?: ApiKeyService,
     ) {}
+
+    /** Immutable captures of public pages produced by the local Chromium provider. */
+    @Public()
+    @Get('screenshots/:filename')
+    @Header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
+    @Header('X-Content-Type-Options', 'nosniff')
+    @Header('Cache-Control', 'public, max-age=31536000, immutable')
+    async serveScreenshot(@Param('filename') filename: string, @Res() res: ServeResponse) {
+        if (!/^[0-9a-f]{64}\.png$/.test(filename)) {
+            res.status(HttpStatus.NOT_FOUND).json({ status: 'error', message: 'Not found' });
+            return;
+        }
+        const path = join(process.env.UPLOADS_DIR || '/var/lib/ever-works/uploads', 'screenshots', filename);
+        let buffer: Buffer;
+        try {
+            buffer = await readFile(path);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+            res.status(HttpStatus.NOT_FOUND).json({ status: 'error', message: 'Not found' });
+            return;
+        }
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Content-Length', buffer.length);
+        res.send(buffer);
+    }
 
     /**
      * Image upload — auth-gated, MIME-sniffed, size-capped, user-scoped.

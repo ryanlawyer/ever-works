@@ -28,6 +28,8 @@ export interface CreateItemsGeneratorDto {
  * DTO for updating items generator configuration
  */
 export interface UpdateItemsGeneratorDto {
+	/** Optional pipeline configuration overrides for this run */
+	pluginConfig?: Record<string, unknown>;
 	/** Optional AI model override */
 	model?: string;
 	/** Method for generation (create-update or recreate) */

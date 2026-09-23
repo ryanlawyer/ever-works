@@ -414,7 +414,7 @@ export async function captureScreenshot(
             };
         }
 
-        const response = await screenshotAPI.getScreenshotUrl({
+        const response = await screenshotAPI.capture({
             url: sourceUrl,
             providerOverride,
             workId: options?.workId,

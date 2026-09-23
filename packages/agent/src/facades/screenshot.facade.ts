@@ -145,6 +145,13 @@ export class ScreenshotFacadeService extends BaseFacadeService implements IScree
             facadeOptions,
         );
 
+        if (!result.success) {
+            throw new ScreenshotFacadeError(
+                result.error || 'Screenshot capture failed',
+                'getSmartImage',
+            );
+        }
+
         return {
             primaryImage: result.cacheUrl || result.imageUrl,
             source: 'screenshot',

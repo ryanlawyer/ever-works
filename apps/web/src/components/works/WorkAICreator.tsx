@@ -160,7 +160,16 @@ export function WorkAICreator({
                     lastFetchedPipelineRef.current = result.data.resolvedPipelineId || pipelineId;
                     setFormSchema(result.data);
                     if (result.data.defaultValues) {
-                        setPluginConfig({ ...result.data.defaultValues });
+                        const defaults = { ...result.data.defaultValues };
+                        if (
+                            proposal &&
+                            result.data.pluginFields.some(
+                                (field) => field.name === 'capture_screenshots',
+                            )
+                        ) {
+                            defaults.capture_screenshots = true;
+                        }
+                        setPluginConfig(defaults);
                     }
 
                     // Enforce override on initial load
