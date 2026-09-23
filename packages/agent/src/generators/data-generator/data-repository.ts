@@ -1033,7 +1033,7 @@ export class DataRepository {
         updates: Partial<
             Pick<
                 ItemData,
-                'featured' | 'order' | 'source_url' | 'health' | 'source_validation' | 'markdown'
+                'featured' | 'order' | 'source_url' | 'health' | 'source_validation' | 'markdown' | 'images'
             >
         >,
     ): Promise<ItemData | null> {

@@ -10,6 +10,8 @@ export interface UpdateItemDto {
 	featured?: boolean;
 	/** Display order */
 	order?: number;
+	/** Captured screenshot URL to prepend to the item's images */
+	screenshot_url?: string;
 	/** Whether to create a pull request */
 	create_pull_request?: boolean;
 	/** Long-form markdown body. When provided, replaces the existing
